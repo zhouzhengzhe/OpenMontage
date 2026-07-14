@@ -45,7 +45,7 @@ Python 依赖安装到仓库内的 `.venv`，Remotion 依赖安装到 `remotion-
 
 ### 全局命令入口
 
-在当前用户的命令目录中提供 `openmontage.cmd`，并将该命令目录加入用户级 `PATH`。启动器负责：
+在 `C:\Users\Aristotle\.local\bin\openmontage.cmd` 提供命令入口，并将 `C:\Users\Aristotle\.local\bin` 加入用户级 `PATH`。启动器负责：
 
 1. 验证 `OPENMONTAGE_HOME`、中央仓库和 `.venv` 是否存在。
 2. 切换到中央仓库，确保仓库内相对路径、Skill、YAML 和渲染资产可被正确解析。
@@ -102,7 +102,7 @@ D:\SoftDocument\CodexProject\OpenMontage\.env
 - 使用当前 Python 3.14 创建隔离 `.venv`；核心依赖和 Piper 已完成解析检查。
 - 安装 `requirements.txt` 与 `piper-tts`。
 - Remotion 使用 `npm.cmd ci`，依据现有 `package-lock.json` 安装。
-- HyperFrames 安装前查询具体版本并记录；只安装经过本次检查的固定版本，不使用无版本约束的持续最新版作为全局运行时。
+- HyperFrames 固定为本次检查的 `0.7.57`，安装到中央仓库根目录的 `node_modules\hyperframes`，使位于中央 `projects` 下的工作区能够由 `npx.cmd` 向上解析该固定版本；不得使用无版本约束的持续最新版作为全局运行时。
 - 不安装 `requirements-gpu.txt`。
 - 初始运行版本固定在已审查提交 `f8d94632ea9bd0057da31904acca1cefecf005dd`。后续更新必须显式执行并重新验证。
 
@@ -122,7 +122,7 @@ D:\SoftDocument\CodexProject\OpenMontage\.env
 
 ## 错误处理
 
-- 中央仓库、虚拟环境或必要运行时缺失时立即失败，并给出具体修复命令。
+- 中央仓库、Python 3.14 虚拟环境、Node.js 22 以上、`npm.cmd`、`npx.cmd`、FFmpeg 或 HyperFrames 0.7.57 缺失时立即失败，并给出对应组件的具体修复命令。
 - Provider 密钥缺失时继续报告其余能力，不视为安装失败。
 - 已批准的渲染运行时不可用时停止，不静默切换。
 - 安装操作必须可重复执行，且不得删除已有 `.env`、`.venv`、`projects` 或用户素材。
@@ -161,6 +161,6 @@ D:\SoftDocument\CodexProject\OpenMontage\.env
 
 - 全局 `openmontage` Skill。
 - 全局启动器。
-- `OPENMONTAGE_HOME`、`OPENMONTAGE_PROJECTS_DIR` 和对应用户级 `PATH` 项。
+- `OPENMONTAGE_HOME`、`OPENMONTAGE_PROJECTS_DIR` 和用户级 `PATH` 中精确的 `C:\Users\Aristotle\.local\bin` 项。
 
 中央仓库、`.env`、`.venv` 和 `projects` 默认保留，除非用户另行明确要求删除。
