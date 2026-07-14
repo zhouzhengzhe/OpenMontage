@@ -251,7 +251,8 @@ git commit -m "feat: add global OpenMontage command router"
 ### Task 2: 全局 Codex Skill 与幂等 Windows 安装器
 
 **Files:**
-- Create: `scripts/windows/openmontage-skill/SKILL.md`
+- Create: `scripts/windows/openmontage/SKILL.md`
+- Create: `scripts/windows/openmontage/agents/openai.yaml`
 - Create: `scripts/windows/install-openmontage-global.ps1`
 - Create: `tests/install/test_openmontage_installer_contract.py`
 
@@ -259,11 +260,16 @@ git commit -m "feat: add global OpenMontage command router"
 - Consumes: Task 1 的 `scripts/windows/openmontage.cmd`、中央仓库、当前 Windows 用户目录。
 - Produces: `Install-OpenMontageGlobal` 行为；全局 Skill；用户变量 `OPENMONTAGE_HOME` 与 `OPENMONTAGE_PROJECTS_DIR`。
 
-- [ ] **Step 1: 使用 `skill-creator` 检查全局 Skill 结构要求**
+- [ ] **Step 1: 使用 `skill-creator` 初始化全局 Skill 源目录**
 
-Run: 读取 `C:\Users\Aristotle\.codex\skills\.system\skill-creator\SKILL.md`，若该位置不存在则读取本会话列出的 `skill-creator` 路径。
+Run:
 
-Expected: 确认全局 Skill 使用 `SKILL.md` 和 YAML frontmatter。
+```powershell
+Get-Content C:\Users\Aristotle\.codex\skills\.system\skill-creator\references\openai_yaml.md -Raw
+python C:\Users\Aristotle\.codex\skills\.system\skill-creator\scripts\init_skill.py openmontage --path scripts\windows --interface display_name="OpenMontage" --interface short_description="按需调用中央 OpenMontage 视频制作环境" --interface default_prompt="Use `$openmontage to run an OpenMontage video-production workflow."
+```
+
+Expected: 创建 `scripts\windows\openmontage\SKILL.md` 与 `scripts\windows\openmontage\agents\openai.yaml`；生成文件暂含模板内容，后续步骤会完整替换。
 
 - [ ] **Step 2: 写失败的安装器契约测试**
 
@@ -277,7 +283,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = REPO_ROOT / "scripts" / "windows" / "install-openmontage-global.ps1"
-SKILL = REPO_ROOT / "scripts" / "windows" / "openmontage-skill" / "SKILL.md"
+SKILL = REPO_ROOT / "scripts" / "windows" / "openmontage" / "SKILL.md"
+SKILL_UI = REPO_ROOT / "scripts" / "windows" / "openmontage" / "agents" / "openai.yaml"
 
 
 class InstallerContractTests(unittest.TestCase):
@@ -307,6 +314,7 @@ class InstallerContractTests(unittest.TestCase):
         self.assertIn("$openmontage", text)
         self.assertIn("明确要求", text)
         self.assertIn("不得自动触发", text)
+        self.assertTrue(SKILL_UI.is_file())
 
 
 if __name__ == "__main__":
@@ -319,7 +327,7 @@ Run: `python -m unittest tests.install.test_openmontage_installer_contract -v`
 
 Expected: FAIL，因为安装器和 Skill 尚不存在。
 
-- [ ] **Step 4: 创建按需全局 Skill 源文件**
+- [ ] **Step 4: 替换为按需全局 Skill 内容并保留生成的 UI 元数据**
 
 ```markdown
 ---
@@ -394,7 +402,9 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 Copy-Item -LiteralPath (Join-Path $Home "scripts\windows\openmontage.cmd") -Destination $GlobalLauncher -Force
-Copy-Item -LiteralPath (Join-Path $Home "scripts\windows\openmontage-skill\SKILL.md") -Destination (Join-Path $GlobalSkillDir "SKILL.md") -Force
+Copy-Item -LiteralPath (Join-Path $Home "scripts\windows\openmontage\SKILL.md") -Destination (Join-Path $GlobalSkillDir "SKILL.md") -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $GlobalSkillDir "agents") | Out-Null
+Copy-Item -LiteralPath (Join-Path $Home "scripts\windows\openmontage\agents\openai.yaml") -Destination (Join-Path $GlobalSkillDir "agents\openai.yaml") -Force
 
 [Environment]::SetEnvironmentVariable("OPENMONTAGE_HOME", $Home, "User")
 [Environment]::SetEnvironmentVariable("OPENMONTAGE_PROJECTS_DIR", $ProjectsDir, "User")
@@ -418,16 +428,21 @@ Write-Output "Skill: $GlobalSkillDir"
 Write-Output "Restart Codex to discover the new skill."
 ```
 
-- [ ] **Step 6: 运行安装器契约测试并确认通过**
+- [ ] **Step 6: 校验 Skill 和安装器契约并确认通过**
 
-Run: `python -m unittest tests.install.test_openmontage_installer_contract -v`
+Run:
 
-Expected: 3 tests，全部 PASS。
+```powershell
+python C:\Users\Aristotle\.codex\skills\.system\skill-creator\scripts\quick_validate.py scripts\windows\openmontage
+python -m unittest tests.install.test_openmontage_installer_contract -v
+```
+
+Expected: Skill validation success；3 tests 全部 PASS。
 
 - [ ] **Step 7: 提交 Task 2**
 
 ```powershell
-git add scripts/windows/openmontage-skill/SKILL.md scripts/windows/install-openmontage-global.ps1 tests/install/test_openmontage_installer_contract.py
+git add scripts/windows/openmontage/SKILL.md scripts/windows/openmontage/agents/openai.yaml scripts/windows/install-openmontage-global.ps1 tests/install/test_openmontage_installer_contract.py
 git commit -m "feat: add secure global OpenMontage installer"
 ```
 
