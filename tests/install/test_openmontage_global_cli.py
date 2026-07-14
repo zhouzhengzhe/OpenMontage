@@ -50,6 +50,17 @@ class OpenMontageGlobalCliTests(unittest.TestCase):
         self.assertNotIn("API_KEY", result.stdout)
         self.assertNotIn("TOKEN", result.stdout)
 
+    def test_doctor_rejects_unpinned_hyperframes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            package = home / "node_modules" / "hyperframes" / "package.json"
+            package.parent.mkdir(parents=True)
+            package.write_text('{"version": "9.9.9"}', encoding="utf-8")
+            result = self.run_cli("doctor", home=home)
+        report = json.loads(result.stdout)
+        self.assertFalse(report["checks"]["hyperframes"]["ok"])
+        self.assertIn("0.7.57", report["checks"]["hyperframes"]["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

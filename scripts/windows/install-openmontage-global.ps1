@@ -82,11 +82,24 @@ $env:OPENMONTAGE_HOME = $Home
 $env:OPENMONTAGE_PROJECTS_DIR = $ProjectsDir
 $env:Path = "$BinDir;$env:Path"
 
-$Identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-& icacls.exe $EnvFile /inheritance:r /grant:r "${Identity}:(F)" "*S-1-5-32-544:(F)" "*S-1-5-18:(F)" | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to restrict .env ACL"
+$CurrentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+$TrustedSids = @(
+    $CurrentSid,
+    [System.Security.Principal.SecurityIdentifier]::new("S-1-5-32-544"),
+    [System.Security.Principal.SecurityIdentifier]::new("S-1-5-18")
+)
+$EnvAcl = [System.Security.AccessControl.FileSecurity]::new()
+$EnvAcl.SetAccessRuleProtection($true, $false)
+$EnvAcl.SetOwner($CurrentSid)
+foreach ($Sid in $TrustedSids) {
+    $Rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $Sid,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    [void]$EnvAcl.AddAccessRule($Rule)
 }
+Set-Acl -LiteralPath $EnvFile -AclObject $EnvAcl
 
 Write-Output "OpenMontage global installation complete."
 Write-Output "Home: $Home"

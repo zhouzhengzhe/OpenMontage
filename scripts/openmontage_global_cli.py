@@ -37,6 +37,21 @@ def _probe(executable: str, *args: str) -> dict[str, object]:
     }
 
 
+def _check_hyperframes(home: Path) -> dict[str, object]:
+    package = home / "node_modules" / "hyperframes" / "package.json"
+    required = "0.7.57"
+    if not package.is_file():
+        return {"ok": False, "detail": f"required version {required}; package not found"}
+    try:
+        installed = json.loads(package.read_text(encoding="utf-8")).get("version")
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "detail": f"required version {required}; package unreadable"}
+    return {
+        "ok": installed == required,
+        "detail": f"required version {required}; installed {installed or 'unknown'}",
+    }
+
+
 def doctor(home: Path) -> int:
     checks: dict[str, dict[str, object]] = {
         "home": {"ok": (home / "AGENT_GUIDE.md").is_file(), "detail": str(home)},
@@ -54,10 +69,7 @@ def doctor(home: Path) -> int:
                 home / "remotion-composer" / "node_modules" / "remotion"
             ),
         },
-        "hyperframes": {
-            "ok": (home / "node_modules" / "hyperframes" / "package.json").is_file(),
-            "detail": "required version 0.7.57",
-        },
+        "hyperframes": _check_hyperframes(home),
         "projects": {
             "ok": (home / "projects").is_dir(),
             "detail": str(home / "projects"),

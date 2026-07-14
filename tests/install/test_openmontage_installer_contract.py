@@ -45,6 +45,13 @@ class InstallerContractTests(unittest.TestCase):
         self.assertIn("if (-not (Test-Path -LiteralPath $EnvFile))", text)
         self.assertIn("hyperframes@0.7.57", text)
 
+    def test_installer_replaces_env_acl_with_three_trusted_principals(self) -> None:
+        text = INSTALLER.read_text(encoding="utf-8")
+        self.assertIn("SetAccessRuleProtection($true, $false)", text)
+        self.assertIn("S-1-5-32-544", text)
+        self.assertIn("S-1-5-18", text)
+        self.assertNotIn("icacls.exe $EnvFile", text)
+
     def test_skill_is_explicitly_triggered(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("$openmontage", text)
