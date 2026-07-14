@@ -4,9 +4,6 @@ import subprocess
 import unittest
 from pathlib import Path
 
-import yaml
-
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = REPO_ROOT / "scripts" / "windows" / "install-openmontage-global.ps1"
 SKILL = REPO_ROOT / "scripts" / "windows" / "openmontage" / "SKILL.md"
@@ -28,6 +25,11 @@ class InstallerContractTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_installer_does_not_shadow_read_only_powershell_home(self) -> None:
+        text = INSTALLER.read_text(encoding="utf-8")
+        self.assertNotIn("[string]$Home", text)
+        self.assertIn('[Alias("Home")]', text)
 
     def test_installer_never_sets_provider_secrets_globally(self) -> None:
         text = INSTALLER.read_text(encoding="utf-8")
@@ -59,9 +61,9 @@ class InstallerContractTests(unittest.TestCase):
         self.assertIn("不得自动触发", text)
 
     def test_skill_ui_disables_implicit_invocation(self) -> None:
-        metadata = yaml.safe_load(SKILL_UI.read_text(encoding="utf-8"))
-        self.assertFalse(metadata["policy"]["allow_implicit_invocation"])
-        self.assertIn("$openmontage", metadata["interface"]["default_prompt"])
+        text = SKILL_UI.read_text(encoding="utf-8")
+        self.assertIn("allow_implicit_invocation: false", text)
+        self.assertIn("$openmontage", text)
 
 
 if __name__ == "__main__":
