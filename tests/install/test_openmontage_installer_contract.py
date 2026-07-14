@@ -46,13 +46,20 @@ class InstallerContractTests(unittest.TestCase):
         text = INSTALLER.read_text(encoding="utf-8")
         self.assertIn("if (-not (Test-Path -LiteralPath $EnvFile))", text)
         self.assertIn("hyperframes@0.7.57", text)
+        self.assertIn("npx.cmd hyperframes browser ensure", text)
+        self.assertIn("npx.cmd hyperframes telemetry disable", text)
+        self.assertIn("for ($Attempt = 1; $Attempt -le 3; $Attempt++)", text)
+        self.assertIn("Google\\Chrome\\Application\\chrome.exe", text)
+        self.assertIn("Add-Content -LiteralPath $EnvFile", text)
 
     def test_installer_replaces_env_acl_with_three_trusted_principals(self) -> None:
         text = INSTALLER.read_text(encoding="utf-8")
-        self.assertIn("SetAccessRuleProtection($true, $false)", text)
+        self.assertIn("icacls.exe $EnvFile /reset", text)
+        self.assertIn("icacls.exe $EnvFile /inheritance:r", text)
+        self.assertIn("icacls.exe $EnvFile /grant:r", text)
         self.assertIn("S-1-5-32-544", text)
         self.assertIn("S-1-5-18", text)
-        self.assertNotIn("icacls.exe $EnvFile", text)
+        self.assertNotIn("Set-Acl", text)
 
     def test_skill_is_explicitly_triggered(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
