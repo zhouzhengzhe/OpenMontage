@@ -19,6 +19,7 @@ htmlcov/
 .trae/
 .idea/
 .vscode/
+.worktrees/
 
 # Pipeline outputs (regenerable — never commit large media)
 output/
