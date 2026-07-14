@@ -61,6 +61,18 @@ class OpenMontageGlobalCliTests(unittest.TestCase):
         self.assertFalse(report["checks"]["hyperframes"]["ok"])
         self.assertIn("0.7.57", report["checks"]["hyperframes"]["detail"])
 
+    def test_demo_forwards_option_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "AGENT_GUIDE.md").touch()
+            (home / "render_demo.py").write_text(
+                "import json, sys; print(json.dumps(sys.argv[1:]))",
+                encoding="utf-8",
+            )
+            result = self.run_cli("demo", "--list", home=home)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), ["--list"])
+
 
 if __name__ == "__main__":
     unittest.main()

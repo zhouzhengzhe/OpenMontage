@@ -107,8 +107,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    raw_args = list(sys.argv[1:] if argv is None else argv)
     home = resolve_home()
+    if raw_args[:1] == ["demo"]:
+        if not (home / "AGENT_GUIDE.md").is_file():
+            print(f"OpenMontage home is invalid: {home}", file=sys.stderr)
+            return 2
+        return _run(
+            home,
+            [sys.executable, str(home / "render_demo.py"), *raw_args[1:]],
+        )
+    args = build_parser().parse_args(raw_args)
     if args.command == "doctor":
         return doctor(home)
     if not (home / "AGENT_GUIDE.md").is_file():
@@ -123,8 +132,6 @@ def main(argv: list[str] | None = None) -> int:
         return _run(home, command)
     if args.command == "test-contracts":
         return _run(home, [sys.executable, "-m", "pytest", "tests/contracts", "-v"])
-    if args.command == "demo":
-        return _run(home, [sys.executable, str(home / "render_demo.py"), *args.args])
     return 2
 
 
