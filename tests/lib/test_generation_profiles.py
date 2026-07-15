@@ -125,6 +125,55 @@ def test_registry_validation_accepts_matching_tool_contract() -> None:
     assert registry.discovered is True
 
 
+@pytest.mark.parametrize(
+    ("value", "allowed"),
+    [
+        (True, [1]),
+        (1, [True]),
+    ],
+)
+def test_registry_validation_enum_distinguishes_booleans_from_numbers(
+    value: object,
+    allowed: list[object],
+) -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"][0]
+    candidate["params"] = {"mode": value}
+    registry = FakeRegistry(
+        [FakeTool("fake_video", "fake", "video_generation", {"mode": {"enum": allowed}})]
+    )
+
+    errors = validate_generation_profile_registry(config, registry)
+
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: param 'mode' "
+        f"value {value!r} is outside enum {allowed!r}"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("value", "allowed"),
+    [
+        (1, [1]),
+        (True, [True]),
+    ],
+)
+def test_registry_validation_enum_accepts_same_json_type(
+    value: object,
+    allowed: list[object],
+) -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"][0]
+    candidate["params"] = {"mode": value}
+    registry = FakeRegistry(
+        [FakeTool("fake_video", "fake", "video_generation", {"mode": {"enum": allowed}})]
+    )
+
+    assert validate_generation_profile_registry(config, registry) == []
+
+
 def test_registry_validation_reports_all_candidate_mismatches() -> None:
     config = _minimal_config()
     config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []

@@ -97,11 +97,15 @@ def validate_generation_profile_registry(
                 continue
             property_schema = properties[key]
             allowed = property_schema.get("enum")
-            if allowed is not None and value not in allowed:
-                errors.append(
-                    f"{location}: param {key!r} value {value!r} is outside enum {allowed!r}"
-                )
-                continue
+            if allowed is not None:
+                try:
+                    jsonschema.validate(instance=value, schema={"enum": allowed})
+                except jsonschema.ValidationError:
+                    errors.append(
+                        f"{location}: param {key!r} value {value!r} "
+                        f"is outside enum {allowed!r}"
+                    )
+                    continue
             try:
                 jsonschema.validate(
                     instance=value,
