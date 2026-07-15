@@ -95,3 +95,28 @@ git diff --check
 
 - 全量测试唯一 warning 来自 `google.genai.types` 对 Python 3.17 将移除内部类型的第三方 `DeprecationWarning`，与本次改动无关。
 - 真实安装器失败路径尚未执行，需在合并后按隔离验证计划完成。
+
+## 复审补充：真实 `*_KEY` 与句中凭据路径
+
+复审指出首轮规则仍漏掉仓库真实使用的非 `API_KEY` 环境变量名，以及句中带空白/标点结尾的凭据路径。本轮继续严格执行 TDD：
+
+- 敏感值规则现在识别全大写、带分隔符的通用 `*_KEY` 环境变量名，回归覆盖 `FAL_KEY`、`AZURE_SPEECH_KEY`、`HIGGSFIELD_KEY`、`UNSPLASH_ACCESS_KEY`。
+- 敏感参数键现在识别 `fal_key`、`azure_speech_key`、`higgsfield-key` 等分隔符 `*_key` 形式，包括嵌套 `params`；错误仍只报告位置，不含秘密原值。
+- 路径规则现在识别句中独立或嵌入式 `.env`、credentials、service-account、private-key、`.pem` 与 `.key` 路径，并允许后跟空白或常见标点。
+- 规则保持边界约束：普通小写单词 `key`、`key visual`、`keyframe_strategy` 与 `keyboard_layout` 不会被误判。
+- CLI 临时 home 回归注入嵌套 `fal_key`，确认 `profiles` 返回非零、安全 JSON，且不回显注入值。
+
+### 补充 RED
+
+- 档位单测：11 failed，57 passed；失败准确覆盖分隔符敏感键、四个真实 `*_KEY` 与句中 `.env`/`.key`/PEM 路径。
+- CLI 临时 home 定向用例：1 failed；旧行为会把嵌套秘密原值写入 `profiles` JSON。
+- 扩展无前导斜杠的句中凭据路径后：5 failed，68 passed。
+
+### 补充 GREEN 与回归
+
+- 档位单测与路由合约：87 passed。
+- CLI unittest：11 passed。
+- 全量 `PYTHONUTF8=1` 的 `tests/lib tests/contracts`：656 passed，7 skipped，1 个无关第三方 warning。
+- PowerShell parser：通过。
+- `git diff --check`：通过。
+- 未运行安装器本体，未修改全局环境。

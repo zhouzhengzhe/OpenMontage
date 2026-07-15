@@ -15,14 +15,19 @@ DEFAULT_SCHEMA_PATH = ROOT / "schemas" / "config" / "generation_profiles.schema.
 _SENSITIVE_KEY = re.compile(
     r"(?:api[_-]?key|access[_-]?(?:key|token)|client[_-]?secret|"
     r"private[_-]?key|credentials?|headers?|cookies?|authorization|"
-    r"(?:^|[_-])(?:token|secret)(?:$|[_-])|token$)",
+    r"(?:^|[_-])(?:token|secret)(?:$|[_-])|token$|[_-]key$)",
     re.I,
 )
 _SECRET_VALUE = re.compile(
     r"(?:"
-    r"(?<![A-Z0-9])(?:[A-Z][A-Z0-9]*_)+(?:API_KEY|TOKEN|SECRET|CREDENTIALS)(?![A-Z0-9])"
-    r"|(?:^|[\\/]+)(?:\.env(?:\.[^\\/]+)?|credentials?|service[-_]account(?:\.[^\\/]*)?|"
-    r"private[-_]key(?:\.[^\\/]*)?|[^\\/]+\.(?:pem|key))(?:$|[\\/]+)"
+    r"(?-i:(?<![A-Z0-9])(?:[A-Z][A-Z0-9]*_)+(?:KEY|TOKEN|SECRET|CREDENTIALS)(?![A-Z0-9]))"
+    r"|(?<![A-Za-z0-9_.-])\.env(?:\.[A-Za-z0-9_-]+)?"
+    r"(?=$|[\\/\s,;:)\]}!?'\".])"
+    r"|(?<![A-Za-z0-9_.-])(?:credentials?(?:\.[^\\/\s,;:)\]}!?'\"]+)?|"
+    r"service[-_]account(?:\.[^\\/\s,;:)\]}!?'\"]+)?|"
+    r"private[-_]key(?:\.[^\\/\s,;:)\]}!?'\"]+)?|"
+    r"[^\\/\s,;:)\]}!?'\"]+\.(?:pem|key))"
+    r"(?=$|[\\/]+|[\s,;:)\]}!?'\".])"
     r"|\b(?:authorization|proxy-authorization|x-api-key|cookie|set-cookie)\s*[:=]"
     r"|(?<![A-Za-z0-9])(?:sk-(?:ant-)?|sk_|gsk_|xai-|gh[pousr]_)[A-Za-z0-9][A-Za-z0-9_-]{3,}"
     r"|\bAKIA[A-Z0-9]{12,}\b"

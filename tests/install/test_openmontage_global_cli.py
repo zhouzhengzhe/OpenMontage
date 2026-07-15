@@ -12,6 +12,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+import yaml
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLI = REPO_ROOT / "scripts" / "openmontage_global_cli.py"
@@ -130,6 +132,32 @@ class OpenMontageGlobalCliTests(unittest.TestCase):
             )
 
             result = self.run_cli("profiles", "validate", home=home)
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertFalse(report["ok"])
+        self.assertTrue(report["errors"])
+        self.assertNotIn(sentinel, result.stdout)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+
+    def test_profiles_temporary_home_rejects_nested_key_without_echoing_value(self) -> None:
+        sentinel = "temporary-home-secret-sentinel-b4da"
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "AGENT_GUIDE.md").touch()
+            config = yaml.safe_load(
+                (REPO_ROOT / "generation_profiles.yaml").read_text(encoding="utf-8")
+            )
+            params = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0][
+                "params"
+            ]
+            params["transport"] = {"fal_key": sentinel}
+            (home / "generation_profiles.yaml").write_text(
+                yaml.safe_dump(config, allow_unicode=True),
+                encoding="utf-8",
+            )
+
+            result = self.run_cli("profiles", home=home)
 
         self.assertEqual(result.returncode, 1, result.stderr)
         report = json.loads(result.stdout)

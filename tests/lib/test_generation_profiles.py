@@ -82,6 +82,9 @@ def test_loader_rejects_secret_shaped_value(tmp_path: Path) -> None:
         "header",
         "cookie",
         "authToken",
+        "fal_key",
+        "azure_speech_key",
+        "higgsfield-key",
     ],
 )
 def test_loader_rejects_sensitive_keys_nested_in_params(
@@ -105,6 +108,10 @@ def test_loader_rejects_sensitive_keys_nested_in_params(
     "secret_value",
     [
         "OPENAI_API_KEY",
+        "FAL_KEY",
+        "AZURE_SPEECH_KEY",
+        "HIGGSFIELD_KEY",
+        "UNSPLASH_ACCESS_KEY",
         "SOME_PROVIDER_TOKEN",
         "SOME_PROVIDER_SECRET",
         "SOME_PROVIDER_CREDENTIALS",
@@ -123,6 +130,17 @@ def test_loader_rejects_sensitive_keys_nested_in_params(
         "AKIAIOSFODNN7EXAMPLE",
         "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature123",
         "-----BEGIN PRIVATE KEY-----\nopaque\n-----END PRIVATE KEY-----",
+        "read .env before use",
+        "D:/repo/.env before use",
+        "C:/keys/signing.key for auth",
+        "./credentials/service-account.json, then continue",
+        "../private-key.pem; rotate after use",
+        "PEM path /secure/client.pem.",
+        "read credentials.json before use",
+        "use service-account.json, then continue",
+        "rotate private-key.pem after use",
+        "PEM file client.pem is configured",
+        "the path signing.key is configured",
     ],
 )
 def test_loader_rejects_sensitive_values_without_echoing_them(
@@ -170,6 +188,18 @@ def test_loader_accepts_safe_nested_candidate_metadata(tmp_path: Path) -> None:
         "output_format": "mp3",
         "cache_policy": "local-only",
     }
+
+    loaded = load_generation_profiles(_write_config(tmp_path, config))
+
+    assert loaded["default_profile"] == "daily"
+
+
+def test_loader_does_not_treat_ordinary_key_text_as_a_secret(tmp_path: Path) -> None:
+    config = deepcopy(_shipped_config())
+    candidate = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0]
+    candidate["reason"] = "Use the key visual direction from the approved brief"
+    candidate["params"]["keyframe_strategy"] = "gentle motion"
+    candidate["params"]["keyboard_layout"] = "standard"
 
     loaded = load_generation_profiles(_write_config(tmp_path, config))
 
