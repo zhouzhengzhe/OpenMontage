@@ -158,6 +158,85 @@ def test_registry_validation_reports_all_candidate_mismatches() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("property_schema", "value", "schema_error"),
+    [
+        ({"type": "integer"}, "not-an-integer", "is not of type 'integer'"),
+        ({"type": "integer", "minimum": 2}, 1, "is less than the minimum of 2"),
+        ({"type": "integer", "maximum": 2}, 3, "is greater than the maximum of 2"),
+    ],
+)
+def test_registry_validation_rejects_type_and_range_schema_violations(
+    property_schema: dict,
+    value: object,
+    schema_error: str,
+) -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"][0]
+    candidate["params"] = {"duration": value}
+    registry = FakeRegistry(
+        [FakeTool("fake_video", "fake", "video_generation", {"duration": property_schema})]
+    )
+
+    errors = validate_generation_profile_registry(config, registry)
+
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        "profiles.daily.video_generation.candidates[0]: "
+        f"param 'duration' value {value!r} violates schema: "
+    )
+    assert schema_error in errors[0]
+
+
+def test_registry_validation_rejects_pattern_schema_violation() -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"][0]
+    candidate["params"] = {"aspect_ratio": "horizontal"}
+    registry = FakeRegistry(
+        [
+            FakeTool(
+                "fake_video",
+                "fake",
+                "video_generation",
+                {"aspect_ratio": {"type": "string", "pattern": r"^\d+:\d+$"}},
+            )
+        ]
+    )
+
+    errors = validate_generation_profile_registry(config, registry)
+
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: param 'aspect_ratio' "
+        "value 'horizontal' violates schema: 'horizontal' does not match '^\\\\d+:\\\\d+$'"
+    ]
+
+
+def test_registry_validation_rejects_format_schema_violation() -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"][0]
+    candidate["params"] = {"notification_email": "not-an-email"}
+    registry = FakeRegistry(
+        [
+            FakeTool(
+                "fake_video",
+                "fake",
+                "video_generation",
+                {"notification_email": {"type": "string", "format": "email"}},
+            )
+        ]
+    )
+
+    errors = validate_generation_profile_registry(config, registry)
+
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: param 'notification_email' "
+        "value 'not-an-email' violates schema: 'not-an-email' is not a 'email'"
+    ]
+
+
 def test_report_contains_available_and_unregistered_statuses_without_environment_secret(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

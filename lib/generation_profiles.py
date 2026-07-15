@@ -17,6 +17,7 @@ _SECRET_VALUE = re.compile(
     r"(?:sk-[A-Za-z0-9_-]{12,}|AIza[0-9A-Za-z_-]{20,}|Bearer\s+[A-Za-z0-9._-]{12,})",
     re.I,
 )
+_FORMAT_CHECKER = jsonschema.FormatChecker()
 
 
 class GenerationProfileError(ValueError):
@@ -94,10 +95,23 @@ def validate_generation_profile_registry(
             if key not in properties:
                 errors.append(f"{location}: param {key!r} is not accepted by {tool.name}")
                 continue
-            allowed = properties[key].get("enum")
+            property_schema = properties[key]
+            allowed = property_schema.get("enum")
             if allowed is not None and value not in allowed:
                 errors.append(
                     f"{location}: param {key!r} value {value!r} is outside enum {allowed!r}"
+                )
+                continue
+            try:
+                jsonschema.validate(
+                    instance=value,
+                    schema=property_schema,
+                    format_checker=_FORMAT_CHECKER,
+                )
+            except jsonschema.ValidationError as exc:
+                errors.append(
+                    f"{location}: param {key!r} value {value!r} "
+                    f"violates schema: {exc.message}"
                 )
     return errors
 
