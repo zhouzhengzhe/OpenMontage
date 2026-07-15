@@ -35,6 +35,11 @@ class OpenMontageGlobalCliTests(unittest.TestCase):
         self.assertIn("doctor", result.stdout)
         self.assertIn("preflight", result.stdout)
 
+    def test_help_lists_profiles(self) -> None:
+        result = self.run_cli("--help")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("profiles", result.stdout)
+
     def test_unknown_command_is_rejected(self) -> None:
         result = self.run_cli("unknown-command")
         self.assertNotEqual(result.returncode, 0)
@@ -60,6 +65,16 @@ class OpenMontageGlobalCliTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertFalse(report["checks"]["hyperframes"]["ok"])
         self.assertIn("0.7.57", report["checks"]["hyperframes"]["detail"])
+
+    def test_profiles_validate_checks_shipped_contract_without_secrets(self) -> None:
+        result = self.run_cli("profiles", "validate", home=REPO_ROOT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["default_profile"], "daily")
+        self.assertEqual(report["errors"], [])
+        for marker in ("OPENAI_API_KEY", "FAL_KEY", "GOOGLE_API_KEY", "Bearer "):
+            self.assertNotIn(marker, result.stdout)
 
     def test_demo_forwards_option_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

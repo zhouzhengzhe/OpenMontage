@@ -93,11 +93,46 @@ def preflight(home: Path) -> int:
     return 0
 
 
+def profiles(home: Path, validate_only: bool = False) -> int:
+    sys.path.insert(0, str(home))
+    from lib.generation_profiles import (
+        GenerationProfileError,
+        build_generation_profile_report,
+        load_generation_profiles,
+        validate_generation_profile_registry,
+    )
+    from tools.tool_registry import registry
+
+    try:
+        config = load_generation_profiles(home / "generation_profiles.yaml")
+        registry.ensure_discovered()
+        if validate_only:
+            errors = validate_generation_profile_registry(config, registry)
+            report = {
+                "ok": not errors,
+                "version": config["version"],
+                "default_profile": config["default_profile"],
+                "errors": errors,
+            }
+        else:
+            report = build_generation_profile_report(
+                config, registry, include_status=True
+            )
+    except GenerationProfileError as exc:
+        report = {"ok": False, "errors": [str(exc)]}
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["ok"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="openmontage")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("doctor")
     subparsers.add_parser("preflight")
+    profiles_parser = subparsers.add_parser("profiles")
+    profiles_parser.add_argument(
+        "action", nargs="?", choices=["validate"], default="show"
+    )
     backlot = subparsers.add_parser("backlot")
     backlot.add_argument("project_id", nargs="?")
     subparsers.add_parser("test-contracts")
@@ -125,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.command == "preflight":
         return preflight(home)
+    if args.command == "profiles":
+        return profiles(home, validate_only=args.action == "validate")
     if args.command == "backlot":
         command = [sys.executable, "-m", "backlot", "open"]
         if args.project_id:
