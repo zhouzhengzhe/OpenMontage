@@ -71,7 +71,10 @@ class InstallerContractTests(unittest.TestCase):
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("generation_profiles.yaml", text)
         self.assertIn("skills/meta/generation-profile-routing.md", text)
-        self.assertNotIn("API 密钥值", text)
+        self.assertIn("API 密钥只从中央 `.env` 加载", text)
+        self.assertIn("不得打印", text)
+        self.assertIn("不得复制到用户环境变量", text)
+        self.assertIn("不得写入其他项目", text)
 
     def test_skill_ui_disables_implicit_invocation(self) -> None:
         text = SKILL_UI.read_text(encoding="utf-8")

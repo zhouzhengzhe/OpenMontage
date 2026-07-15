@@ -428,7 +428,9 @@ Routing is automatic — `video_compose` reads `edit_decisions.render_runtime` a
 
 ## Generation Profiles (Mandatory)
 
-Before proposing any paid generation provider, read `skills/meta/generation-profile-routing.md` and the central `generation_profiles.yaml`. Resolve `daily` or `quality`, validate candidates against the live registry, and disclose the resolved profile in the provider proposal.
+Before proposing any generation provider, read `skills/meta/generation-profile-routing.md` and the central `generation_profiles.yaml`. Resolve `daily` or `quality`, validate candidates against the live registry, and disclose the resolved profile in the provider proposal.
+
+Paid-provider disclosure remains governed separately by the existing Decision Communication Contract, cost estimate, budget, and approval rules. Profile resolution applies equally to local, free, and paid generation providers; paid disclosure applies only where relevant.
 
 The profile is a preference policy, not approval and not an automatic fallback chain. Provider/model substitutions still require the Decision Communication Contract, budget checks, and an append-only `decision_log` revision.
 
