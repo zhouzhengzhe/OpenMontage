@@ -60,3 +60,78 @@ def load_generation_profiles(
     if findings:
         raise GenerationProfileError("; ".join(findings))
     return config
+
+
+def _iter_candidates(config: dict[str, Any]):
+    for profile_name, profile in config["profiles"].items():
+        for capability, capability_config in profile["capabilities"].items():
+            for index, candidate in enumerate(capability_config["candidates"]):
+                yield profile_name, capability, index, candidate
+
+
+def validate_generation_profile_registry(
+    config: dict[str, Any],
+    tool_registry: Any,
+) -> list[str]:
+    tool_registry.ensure_discovered()
+    errors: list[str] = []
+    for profile_name, capability, index, candidate in _iter_candidates(config):
+        location = f"profiles.{profile_name}.{capability}.candidates[{index}]"
+        tool = tool_registry.get(candidate["tool"])
+        if tool is None:
+            errors.append(f"{location}: tool {candidate['tool']!r} is not registered")
+            continue
+        if tool.provider != candidate["provider"]:
+            errors.append(
+                f"{location}: provider {candidate['provider']!r} does not match {tool.provider!r}"
+            )
+        if tool.capability != capability:
+            errors.append(
+                f"{location}: capability {capability!r} does not match {tool.capability!r}"
+            )
+        properties = tool.input_schema.get("properties", {})
+        for key, value in candidate["params"].items():
+            if key not in properties:
+                errors.append(f"{location}: param {key!r} is not accepted by {tool.name}")
+                continue
+            allowed = properties[key].get("enum")
+            if allowed is not None and value not in allowed:
+                errors.append(
+                    f"{location}: param {key!r} value {value!r} is outside enum {allowed!r}"
+                )
+    return errors
+
+
+def build_generation_profile_report(
+    config: dict[str, Any],
+    tool_registry: Any,
+    include_status: bool = True,
+) -> dict[str, Any]:
+    errors = validate_generation_profile_registry(config, tool_registry)
+    profiles: dict[str, Any] = {}
+    for profile_name, profile in config["profiles"].items():
+        capabilities: dict[str, list[dict[str, Any]]] = {}
+        for capability, capability_config in profile["capabilities"].items():
+            candidates: list[dict[str, Any]] = []
+            for candidate in capability_config["candidates"]:
+                item = dict(candidate)
+                tool = tool_registry.get(candidate["tool"])
+                if include_status and tool is not None:
+                    item["status"] = tool.get_status().value
+                elif include_status:
+                    item["status"] = "unregistered"
+                else:
+                    item["status"] = "not_checked"
+                candidates.append(item)
+            capabilities[capability] = candidates
+        profiles[profile_name] = {
+            "intent": profile["intent"],
+            "capabilities": capabilities,
+        }
+    return {
+        "ok": not errors,
+        "version": config["version"],
+        "default_profile": config["default_profile"],
+        "errors": errors,
+        "profiles": profiles,
+    }
