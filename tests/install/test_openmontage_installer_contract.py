@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -11,6 +12,46 @@ SKILL_UI = REPO_ROOT / "scripts" / "windows" / "openmontage" / "agents" / "opena
 
 
 class InstallerContractTests(unittest.TestCase):
+    def assert_profile_validation_guard(self, text: str) -> None:
+        acl_grant = "& icacls.exe $EnvFile /grant:r"
+        acl_failure = 'throw "Failed to grant the restricted .env ACL"'
+        profile_args = '$ProfileArgs = @("profiles", "validate")'
+        cli_call = "& $VenvPython $ProfilesCli @ProfileArgs"
+        success = 'Write-Output "OpenMontage global installation complete."'
+
+        for marker in (acl_grant, acl_failure, profile_args, cli_call, success):
+            self.assertIn(marker, text)
+
+        acl_grant_index = text.index(acl_grant)
+        acl_if_index = text.index("if ($LASTEXITCODE -ne 0)", acl_grant_index)
+        acl_throw_index = text.index(acl_failure, acl_if_index)
+        acl_guard_end = text.index("}", acl_throw_index) + 1
+        profile_args_index = text.index(profile_args, acl_guard_end)
+        cli_call_index = text.index(cli_call, profile_args_index)
+        cli_call_end = cli_call_index + len(cli_call)
+        success_index = text.index(success, cli_call_end)
+
+        guard_region = text[cli_call_end:success_index]
+        guard_match = re.fullmatch(
+            r'\s*(?P<exit_guard>if \(\$LASTEXITCODE -ne 0\))\s*\{\s*'
+            r'(?P<failure_throw>throw "Failed to validate generation profiles")'
+            r"\s*\}\s*",
+            guard_region,
+        )
+        self.assertIsNotNone(guard_match)
+        assert guard_match is not None
+        exit_guard_index = cli_call_end + guard_match.start("exit_guard")
+        failure_throw_index = cli_call_end + guard_match.start("failure_throw")
+
+        self.assertLess(acl_grant_index, acl_if_index)
+        self.assertLess(acl_if_index, acl_throw_index)
+        self.assertLess(acl_guard_end, profile_args_index)
+        self.assertLess(profile_args_index, cli_call_index)
+        self.assertLess(cli_call_index, exit_guard_index)
+        self.assertLess(exit_guard_index, failure_throw_index)
+        self.assertLess(failure_throw_index, success_index)
+        self.assertIn("@ProfileArgs", text[cli_call_index:cli_call_end])
+
     def test_powershell_script_parses(self) -> None:
         command = (
             "$errors=$null; "
@@ -63,12 +104,14 @@ class InstallerContractTests(unittest.TestCase):
 
     def test_installer_validates_profiles_before_success(self) -> None:
         text = INSTALLER.read_text(encoding="utf-8")
-        validate_index = text.index('"profiles", "validate"')
-        success_index = text.index(
-            'Write-Output "OpenMontage global installation complete."'
+        unused_args_text = text.replace(
+            "& $VenvPython $ProfilesCli @ProfileArgs",
+            '& $VenvPython $ProfilesCli "profiles" "validate"',
+            1,
         )
-        self.assertLess(validate_index, success_index)
-        self.assertIn("Failed to validate generation profiles", text)
+        with self.assertRaises(AssertionError):
+            self.assert_profile_validation_guard(unused_args_text)
+        self.assert_profile_validation_guard(text)
 
     def test_skill_is_explicitly_triggered(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
