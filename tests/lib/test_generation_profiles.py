@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,8 +68,10 @@ class FakeTool:
         self.provider = provider
         self.capability = capability
         self.input_schema = {"type": "object", "properties": properties}
+        self.status_calls = 0
 
     def get_status(self) -> FakeStatus:
+        self.status_calls += 1
         return FakeStatus("available")
 
 
@@ -123,29 +127,76 @@ def test_registry_validation_accepts_matching_tool_contract() -> None:
 
 def test_registry_validation_reports_all_candidate_mismatches() -> None:
     config = _minimal_config()
-    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"][0]
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidates = config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"]
+    candidate = candidates[0]
     candidate["provider"] = "wrong-provider"
     candidate["params"] = {"mode": "invalid", "api_family": "missing"}
+    candidates.append(
+        {
+            "tool": "missing_video",
+            "provider": "missing",
+            "params": {"mode": "std"},
+            "reason": "unregistered contract fixture",
+        }
+    )
     registry = FakeRegistry(
         [FakeTool("fake_video", "fake", "image_generation", {"mode": {"enum": ["std", "pro"]}})]
     )
     errors = validate_generation_profile_registry(config, registry)
-    assert any("provider" in error for error in errors)
-    assert any("capability" in error for error in errors)
-    assert any("not accepted" in error for error in errors)
-    assert any("outside enum" in error for error in errors)
+    assert len(errors) == 5
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: provider 'wrong-provider' "
+        "does not match 'fake'",
+        "profiles.daily.video_generation.candidates[0]: capability 'video_generation' "
+        "does not match 'image_generation'",
+        "profiles.daily.video_generation.candidates[0]: param 'mode' value 'invalid' "
+        "is outside enum ['std', 'pro']",
+        "profiles.daily.video_generation.candidates[0]: param 'api_family' is not accepted "
+        "by fake_video",
+        "profiles.daily.video_generation.candidates[1]: tool 'missing_video' is not registered",
+    ]
 
 
-def test_report_contains_status_but_no_environment_values() -> None:
+def test_report_contains_available_and_unregistered_statuses_without_environment_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = "task2-environment-secret-sentinel-9f4e50d7"
+    monkeypatch.setenv("OPENMONTAGE_TEST_SECRET", sentinel)
+    assert os.environ["OPENMONTAGE_TEST_SECRET"] == sentinel
     config = _minimal_config()
-    registry = FakeRegistry(
-        [FakeTool("fake_video", "fake", "video_generation", {"mode": {"enum": ["std", "pro"]}})]
+    config["profiles"]["daily"]["capabilities"]["video_generation"]["candidates"].append(
+        {
+            "tool": "missing_video",
+            "provider": "missing",
+            "params": {},
+            "reason": "unregistered report fixture",
+        }
     )
+    assert sentinel not in repr(config)
+    tool = FakeTool("fake_video", "fake", "video_generation", {"mode": {"enum": ["std", "pro"]}})
+    registry = FakeRegistry([tool])
     report = build_generation_profile_report(config, registry)
-    candidate = report["profiles"]["daily"]["capabilities"]["video_generation"][0]
-    assert report["ok"] is True
-    assert candidate["status"] == "available"
-    assert "environment" not in repr(report).lower()
+    candidates = report["profiles"]["daily"]["capabilities"]["video_generation"]
+    assert report["ok"] is False
+    assert candidates[0]["status"] == "available"
+    assert candidates[1]["status"] == "unregistered"
+    assert tool.status_calls == 2
+    serialized = json.dumps(report, sort_keys=True)
+    assert sentinel not in serialized
+    assert sentinel not in repr(report)
+
+
+def test_report_marks_status_not_checked_without_calling_get_status() -> None:
+    config = _minimal_config()
+    tool = FakeTool("fake_video", "fake", "video_generation", {"mode": {"enum": ["std", "pro"]}})
+    report = build_generation_profile_report(config, FakeRegistry([tool]), include_status=False)
+    statuses = [
+        profile["capabilities"]["video_generation"][0]["status"]
+        for profile in report["profiles"].values()
+    ]
+    assert statuses == ["not_checked", "not_checked"]
+    assert tool.status_calls == 0
 
 
 def test_shipped_profiles_match_current_registry_contracts() -> None:
