@@ -1,0 +1,129 @@
+version: 1
+default_profile: daily
+
+profiles:
+  daily:
+    intent: balanced_cost_latency
+    capabilities:
+      video_generation:
+        candidates:
+          - tool: gemini_omni_video
+            provider: gemini_omni
+            params: {}
+            reason: 日常视频优先兼顾生成能力与迭代效率
+          - tool: kling_official_video
+            provider: kling_official
+            params:
+              model_name: kling-v3
+              mode: std
+              resolution: 720p
+            reason: 首选不可用时提供稳定的标准质量路径
+          - tool: grok_video
+            provider: grok
+            params:
+              resolution: 720p
+            reason: 提供短视频日常迭代候选
+      image_generation:
+        candidates:
+          - tool: google_imagen
+            provider: google_imagen
+            params:
+              model: imagen-4.0-fast-generate-001
+            reason: 日常图片优先低延迟模型
+          - tool: dashscope_image
+            provider: dashscope
+            params:
+              model: z-image-turbo
+            reason: 提供快速中文生态图片候选
+          - tool: grok_image
+            provider: grok
+            params:
+              model: grok-imagine-image
+              resolution: 1k
+            reason: 提供通用日常图片候选
+      tts:
+        candidates:
+          - tool: dashscope_tts
+            provider: dashscope
+            params:
+              model: qwen3-tts-flash
+            reason: 日常中文配音优先低延迟路径
+          - tool: google_tts
+            provider: google_tts
+            params: {}
+            reason: 提供多语言日常配音候选
+      music_generation:
+        candidates:
+          - tool: google_music
+            provider: google
+            params: {}
+            reason: 日常背景音乐使用固定的 Lyria 生成路径
+          - tool: music_gen
+            provider: elevenlabs
+            params: {}
+            reason: 首选不可用时提供另一条音乐生成路径
+
+  quality:
+    intent: maximize_output_quality
+    capabilities:
+      video_generation:
+        candidates:
+          - tool: seedance_video
+            provider: seedance
+            params:
+              model_variant: standard
+              resolution: 720p
+            reason: 精品视频优先电影感与运动一致性
+          - tool: kling_official_video
+            provider: kling_official
+            params:
+              model_name: kling-v3
+              mode: pro
+              resolution: 1080p
+            reason: 提供高质量 Kling 专业模式候选
+          - tool: veo_video
+            provider: veo
+            params:
+              model_variant: veo3.1
+              resolution: 1080p
+            reason: 提供高质量原生音视频候选
+      image_generation:
+        candidates:
+          - tool: openai_image
+            provider: openai
+            params:
+              model: gpt-image-2
+              quality: high
+            reason: 精品图片优先细节、文字与编辑能力
+          - tool: dashscope_image
+            provider: dashscope
+            params:
+              model: qwen-image-2.0-pro
+            reason: 提供高质量中文图像候选
+          - tool: google_imagen
+            provider: google_imagen
+            params:
+              model: imagen-4.0-ultra-generate-001
+            reason: 提供高保真 Imagen 候选
+      tts:
+        candidates:
+          - tool: elevenlabs_tts
+            provider: elevenlabs
+            params:
+              model_id: eleven_multilingual_v2
+            reason: 精品配音优先自然度与角色表现
+          - tool: dashscope_tts
+            provider: dashscope
+            params:
+              model: qwen3-tts-instruct-flash
+            reason: 提供可指令控制的中文配音候选
+      music_generation:
+        candidates:
+          - tool: music_gen
+            provider: elevenlabs
+            params: {}
+            reason: 精品音乐优先完整结构与情绪控制
+          - tool: google_music
+            provider: google
+            params: {}
+            reason: 提供 Lyria 高质量音乐候选
