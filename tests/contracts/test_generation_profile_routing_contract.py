@@ -20,6 +20,19 @@ def _section(text: str, heading: str) -> str:
     return text[start:] if end == -1 else text[start:end]
 
 
+def _routing_case_table(section: str) -> dict[str, tuple[str, str]]:
+    rows: dict[str, tuple[str, str]] = {}
+    for line in section.splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 3:
+            continue
+        request = cells[0].strip("`")
+        rows[request] = (cells[1].strip("`"), cells[2])
+    return rows
+
+
 def _load_global_cli() -> ModuleType:
     spec = importlib.util.spec_from_file_location("openmontage_global_cli", GLOBAL_CLI)
     assert spec is not None and spec.loader is not None
@@ -47,10 +60,44 @@ def test_routing_skill_defines_negation_override_and_conflict_semantics() -> Non
 
     assert "否定表达只抑制第 4 级质量意图自动触发" in precedence
     assert "显式 `profile=quality` 按第 1 级优先并覆盖否定表达" in precedence
-    assert re.search(
-        r"同时出现 `profile=daily` 与 `profile=quality`.*停止.*要求用户选择.*不得生成",
-        precedence,
+
+
+def test_routing_skill_normalizes_all_explicit_profile_aliases() -> None:
+    text = ROUTING.read_text(encoding="utf-8")
+    assert "### 显式档位归一化与冲突" in text
+    routing = _section(text, "### 显式档位归一化与冲突")
+    mappings = re.findall(
+        r"(?m)^- `([^`]+)`、`([^`]+)` -> `([^`]+)`$",
+        routing,
     )
+
+    assert mappings == [
+        ("日常模式", "profile=daily", "daily"),
+        ("高质量模式", "profile=quality", "quality"),
+    ]
+
+
+def test_routing_skill_conflict_matrix_covers_alias_combinations() -> None:
+    text = ROUTING.read_text(encoding="utf-8")
+    assert "### 显式档位归一化与冲突" in text
+    routing = _section(text, "### 显式档位归一化与冲突")
+    rows = _routing_case_table(routing)
+
+    conflicting = (
+        "日常模式 高质量模式",
+        "日常模式 profile=quality",
+        "profile=daily 高质量模式",
+    )
+    for request in conflicting:
+        normalized, result = rows[request]
+        assert normalized == "{daily, quality}"
+        assert "停止提案与执行" in result
+        assert "要求用户选择" in result
+        assert "不得生成" in result
+
+    normalized, result = rows["日常模式 profile=daily"]
+    assert normalized == "{daily}"
+    assert "不冲突" in result and "daily" in result
 
 
 def test_routing_skill_resets_profile_for_every_new_run() -> None:
