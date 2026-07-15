@@ -151,6 +151,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to grant the restricted .env ACL"
 }
 
+$ProfilesCli = Join-Path $InstallRoot "scripts\openmontage_global_cli.py"
+$ProfileArgs = @("profiles", "validate")
+& $VenvPython $ProfilesCli @ProfileArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to validate generation profiles"
+}
+
 Write-Output "OpenMontage global installation complete."
 Write-Output "Home: $InstallRoot"
 Write-Output "Launcher: $GlobalLauncher"

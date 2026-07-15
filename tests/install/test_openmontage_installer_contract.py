@@ -61,6 +61,15 @@ class InstallerContractTests(unittest.TestCase):
         self.assertIn("S-1-5-18", text)
         self.assertNotIn("Set-Acl", text)
 
+    def test_installer_validates_profiles_before_success(self) -> None:
+        text = INSTALLER.read_text(encoding="utf-8")
+        validate_index = text.index('"profiles", "validate"')
+        success_index = text.index(
+            'Write-Output "OpenMontage global installation complete."'
+        )
+        self.assertLess(validate_index, success_index)
+        self.assertIn("Failed to validate generation profiles", text)
+
     def test_skill_is_explicitly_triggered(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("$openmontage", text)
