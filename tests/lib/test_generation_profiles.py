@@ -34,27 +34,172 @@ def test_shipped_profiles_load_with_daily_default() -> None:
         }
 
 
-def test_schema_rejects_sensitive_candidate_field(tmp_path: Path) -> None:
-    config = yaml.safe_load((ROOT / "generation_profiles.yaml").read_text(encoding="utf-8"))
-    config = deepcopy(config)
-    candidate = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0]
-    candidate["api_key"] = "not-a-real-key"
+def _write_config(tmp_path: Path, config: dict) -> Path:
     path = tmp_path / "profiles.yaml"
     path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def _shipped_config() -> dict:
+    return yaml.safe_load(
+        (ROOT / "generation_profiles.yaml").read_text(encoding="utf-8")
+    )
+
+
+def test_loader_rejects_non_daily_default(tmp_path: Path) -> None:
+    config = deepcopy(_shipped_config())
+    config["default_profile"] = "quality"
+
     with pytest.raises(GenerationProfileError, match="schema validation failed"):
-        load_generation_profiles(path)
+        load_generation_profiles(_write_config(tmp_path, config))
+
+
+def test_schema_rejects_sensitive_candidate_field(tmp_path: Path) -> None:
+    config = deepcopy(_shipped_config())
+    candidate = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0]
+    candidate["api_key"] = "not-a-real-key"
+    with pytest.raises(GenerationProfileError, match="schema validation failed"):
+        load_generation_profiles(_write_config(tmp_path, config))
 
 
 def test_loader_rejects_secret_shaped_value(tmp_path: Path) -> None:
-    config = yaml.safe_load((ROOT / "generation_profiles.yaml").read_text(encoding="utf-8"))
-    config = deepcopy(config)
+    config = deepcopy(_shipped_config())
     config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0]["reason"] = (
         "sk-example-value-that-must-never-be-stored"
     )
-    path = tmp_path / "profiles.yaml"
-    path.write_text(yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
     with pytest.raises(GenerationProfileError, match="secret-like value"):
-        load_generation_profiles(path)
+        load_generation_profiles(_write_config(tmp_path, config))
+
+
+@pytest.mark.parametrize(
+    "sensitive_key",
+    [
+        "token",
+        "credential",
+        "private_key",
+        "client-secret",
+        "access_key",
+        "header",
+        "cookie",
+        "authToken",
+    ],
+)
+def test_loader_rejects_sensitive_keys_nested_in_params(
+    tmp_path: Path,
+    sensitive_key: str,
+) -> None:
+    config = deepcopy(_shipped_config())
+    params = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0][
+        "params"
+    ]
+    params["transport"] = {sensitive_key: "redacted-fixture"}
+
+    with pytest.raises(GenerationProfileError) as error:
+        load_generation_profiles(_write_config(tmp_path, config))
+
+    assert "sensitive field at" in str(error.value)
+    assert "redacted-fixture" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "secret_value",
+    [
+        "OPENAI_API_KEY",
+        "SOME_PROVIDER_TOKEN",
+        "SOME_PROVIDER_SECRET",
+        "SOME_PROVIDER_CREDENTIALS",
+        r"C:\\service\\.env",
+        "./credentials/service-account.json",
+        "../private-key.pem",
+        "./keys/signing.key",
+        "Authorization: Bearer opaque-payload",
+        "Cookie: session=opaque-payload",
+        "sk-example-value",
+        "sk_example_value",
+        "sk-ant-example-value",
+        "gsk_example_value",
+        "xai-example-value",
+        "ghp_example_value",
+        "AKIAIOSFODNN7EXAMPLE",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature123",
+        "-----BEGIN PRIVATE KEY-----\nopaque\n-----END PRIVATE KEY-----",
+    ],
+)
+def test_loader_rejects_sensitive_values_without_echoing_them(
+    tmp_path: Path,
+    secret_value: str,
+) -> None:
+    config = deepcopy(_shipped_config())
+    config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0][
+        "reason"
+    ] = secret_value
+
+    with pytest.raises(GenerationProfileError) as error:
+        load_generation_profiles(_write_config(tmp_path, config))
+
+    assert "secret-like value at" in str(error.value)
+    assert secret_value not in str(error.value)
+
+
+def test_loader_rejects_nested_authorization_header_without_echoing_value(
+    tmp_path: Path,
+) -> None:
+    config = deepcopy(_shipped_config())
+    params = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0][
+        "params"
+    ]
+    params["transport"] = {
+        "headers": {"Authorization": "Bearer nested-secret-fixture"}
+    }
+
+    with pytest.raises(GenerationProfileError) as error:
+        load_generation_profiles(_write_config(tmp_path, config))
+
+    message = str(error.value)
+    assert "sensitive field at" in message
+    assert "nested-secret-fixture" not in message
+
+
+def test_loader_accepts_safe_nested_candidate_metadata(tmp_path: Path) -> None:
+    config = deepcopy(_shipped_config())
+    params = config["profiles"]["daily"]["capabilities"]["tts"]["candidates"][0][
+        "params"
+    ]
+    params["render_options"] = {
+        "voice_style": "warm",
+        "output_format": "mp3",
+        "cache_policy": "local-only",
+    }
+
+    loaded = load_generation_profiles(_write_config(tmp_path, config))
+
+    assert loaded["default_profile"] == "daily"
+
+
+def test_loader_wraps_invalid_main_schema_without_leaking_contents(
+    tmp_path: Path,
+) -> None:
+    sentinel = "schema-secret-sentinel-4f2b"
+    schema_path = tmp_path / "invalid.schema.json"
+    schema_path.write_text(
+        json.dumps({"type": 7, "description": sentinel}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(GenerationProfileError) as error:
+        load_generation_profiles(schema_path=schema_path)
+
+    message = str(error.value)
+    assert "profile schema is invalid" in message
+    assert sentinel not in message
+
+
+def test_loader_wraps_non_object_main_schema(tmp_path: Path) -> None:
+    schema_path = tmp_path / "array.schema.json"
+    schema_path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(GenerationProfileError, match="profile schema is invalid"):
+        load_generation_profiles(schema_path=schema_path)
 
 
 @dataclass
@@ -85,6 +230,11 @@ class FakeRegistry:
 
     def get(self, name: str) -> FakeTool | None:
         return self.tools.get(name)
+
+
+class FailingDiscoveryRegistry(FakeRegistry):
+    def ensure_discovered(self) -> None:
+        raise RuntimeError("registry-secret-sentinel-81ce")
 
 
 def _minimal_config() -> dict:
@@ -125,6 +275,57 @@ def test_registry_validation_accepts_matching_tool_contract() -> None:
     assert registry.discovered is True
 
 
+def test_registry_validation_reports_discovery_failure_without_exception_text() -> None:
+    errors = validate_generation_profile_registry(
+        _minimal_config(), FailingDiscoveryRegistry([])
+    )
+
+    assert errors == ["registry discovery failed (RuntimeError)"]
+    assert "registry-secret-sentinel-81ce" not in repr(errors)
+
+
+@pytest.mark.parametrize(
+    ("input_schema", "category"),
+    [
+        ([], "input_schema is not an object"),
+        ({"type": "object", "properties": []}, "input_schema.properties is not an object"),
+    ],
+)
+def test_registry_validation_reports_malformed_tool_input_schema(
+    input_schema: object,
+    category: str,
+) -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    tool = FakeTool("fake_video", "fake", "video_generation", {})
+    tool.input_schema = input_schema
+
+    errors = validate_generation_profile_registry(config, FakeRegistry([tool]))
+
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: " + category
+    ]
+
+
+def test_registry_validation_reports_invalid_property_schema_without_traceback() -> None:
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    tool = FakeTool(
+        "fake_video",
+        "fake",
+        "video_generation",
+        {"mode": {"type": 7, "description": "property-secret-sentinel-7d09"}},
+    )
+
+    errors = validate_generation_profile_registry(config, FakeRegistry([tool]))
+
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: "
+        "param 'mode' has invalid registry schema"
+    ]
+    assert "property-secret-sentinel-7d09" not in repr(errors)
+
+
 @pytest.mark.parametrize(
     ("value", "allowed"),
     [
@@ -148,7 +349,7 @@ def test_registry_validation_enum_distinguishes_booleans_from_numbers(
 
     assert errors == [
         "profiles.daily.video_generation.candidates[0]: param 'mode' "
-        f"value {value!r} is outside enum {allowed!r}"
+        "is outside enum"
     ]
 
 
@@ -199,8 +400,7 @@ def test_registry_validation_reports_all_candidate_mismatches() -> None:
         "does not match 'fake'",
         "profiles.daily.video_generation.candidates[0]: capability 'video_generation' "
         "does not match 'image_generation'",
-        "profiles.daily.video_generation.candidates[0]: param 'mode' value 'invalid' "
-        "is outside enum ['std', 'pro']",
+        "profiles.daily.video_generation.candidates[0]: param 'mode' is outside enum",
         "profiles.daily.video_generation.candidates[0]: param 'api_family' is not accepted "
         "by fake_video",
         "profiles.daily.video_generation.candidates[1]: tool 'missing_video' is not registered",
@@ -208,17 +408,17 @@ def test_registry_validation_reports_all_candidate_mismatches() -> None:
 
 
 @pytest.mark.parametrize(
-    ("property_schema", "value", "schema_error"),
+    ("property_schema", "value", "validator"),
     [
-        ({"type": "integer"}, "not-an-integer", "is not of type 'integer'"),
-        ({"type": "integer", "minimum": 2}, 1, "is less than the minimum of 2"),
-        ({"type": "integer", "maximum": 2}, 3, "is greater than the maximum of 2"),
+        ({"type": "integer"}, "not-an-integer", "type"),
+        ({"type": "integer", "minimum": 2}, 1, "minimum"),
+        ({"type": "integer", "maximum": 2}, 3, "maximum"),
     ],
 )
 def test_registry_validation_rejects_type_and_range_schema_violations(
     property_schema: dict,
     value: object,
-    schema_error: str,
+    validator: str,
 ) -> None:
     config = _minimal_config()
     config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
@@ -230,12 +430,10 @@ def test_registry_validation_rejects_type_and_range_schema_violations(
 
     errors = validate_generation_profile_registry(config, registry)
 
-    assert len(errors) == 1
-    assert errors[0].startswith(
+    assert errors == [
         "profiles.daily.video_generation.candidates[0]: "
-        f"param 'duration' value {value!r} violates schema: "
-    )
-    assert schema_error in errors[0]
+        f"param 'duration' violates registry schema ({validator})"
+    ]
 
 
 def test_registry_validation_rejects_pattern_schema_violation() -> None:
@@ -258,7 +456,7 @@ def test_registry_validation_rejects_pattern_schema_violation() -> None:
 
     assert errors == [
         "profiles.daily.video_generation.candidates[0]: param 'aspect_ratio' "
-        "value 'horizontal' violates schema: 'horizontal' does not match '^\\\\d+:\\\\d+$'"
+        "violates registry schema (pattern)"
     ]
 
 
@@ -282,8 +480,36 @@ def test_registry_validation_rejects_format_schema_violation() -> None:
 
     assert errors == [
         "profiles.daily.video_generation.candidates[0]: param 'notification_email' "
-        "value 'not-an-email' violates schema: 'not-an-email' is not a 'email'"
+        "violates registry schema (format)"
     ]
+
+
+def test_registry_validation_does_not_echo_candidate_or_schema_values() -> None:
+    sentinel = "registry-param-secret-sentinel-504d"
+    config = _minimal_config()
+    config["profiles"]["quality"]["capabilities"]["video_generation"]["candidates"] = []
+    candidate = config["profiles"]["daily"]["capabilities"]["video_generation"][
+        "candidates"
+    ][0]
+    candidate["params"] = {"mode": sentinel}
+    registry = FakeRegistry(
+        [
+            FakeTool(
+                "fake_video",
+                "fake",
+                "video_generation",
+                {"mode": {"enum": ["schema-secret-sentinel-ea72"]}},
+            )
+        ]
+    )
+
+    errors = validate_generation_profile_registry(config, registry)
+
+    assert errors == [
+        "profiles.daily.video_generation.candidates[0]: param 'mode' is outside enum"
+    ]
+    assert sentinel not in repr(errors)
+    assert "schema-secret-sentinel-ea72" not in repr(errors)
 
 
 def test_report_contains_available_and_unregistered_statuses_without_environment_secret(

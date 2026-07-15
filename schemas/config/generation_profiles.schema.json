@@ -7,7 +7,7 @@
   "required": ["version", "default_profile", "profiles"],
   "properties": {
     "version": {"const": 1},
-    "default_profile": {"enum": ["daily", "quality"]},
+    "default_profile": {"const": "daily"},
     "profiles": {
       "type": "object",
       "additionalProperties": false,

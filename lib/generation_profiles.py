@@ -12,10 +12,26 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PROFILE_PATH = ROOT / "generation_profiles.yaml"
 DEFAULT_SCHEMA_PATH = ROOT / "schemas" / "config" / "generation_profiles.schema.json"
-_SENSITIVE_KEY = re.compile(r"(?:api[_-]?key|access[_-]?token|secret|authorization)", re.I)
-_SECRET_VALUE = re.compile(
-    r"(?:sk-[A-Za-z0-9_-]{12,}|AIza[0-9A-Za-z_-]{20,}|Bearer\s+[A-Za-z0-9._-]{12,})",
+_SENSITIVE_KEY = re.compile(
+    r"(?:api[_-]?key|access[_-]?(?:key|token)|client[_-]?secret|"
+    r"private[_-]?key|credentials?|headers?|cookies?|authorization|"
+    r"(?:^|[_-])(?:token|secret)(?:$|[_-])|token$)",
     re.I,
+)
+_SECRET_VALUE = re.compile(
+    r"(?:"
+    r"(?<![A-Z0-9])(?:[A-Z][A-Z0-9]*_)+(?:API_KEY|TOKEN|SECRET|CREDENTIALS)(?![A-Z0-9])"
+    r"|(?:^|[\\/]+)(?:\.env(?:\.[^\\/]+)?|credentials?|service[-_]account(?:\.[^\\/]*)?|"
+    r"private[-_]key(?:\.[^\\/]*)?|[^\\/]+\.(?:pem|key))(?:$|[\\/]+)"
+    r"|\b(?:authorization|proxy-authorization|x-api-key|cookie|set-cookie)\s*[:=]"
+    r"|(?<![A-Za-z0-9])(?:sk-(?:ant-)?|sk_|gsk_|xai-|gh[pousr]_)[A-Za-z0-9][A-Za-z0-9_-]{3,}"
+    r"|\bAKIA[A-Z0-9]{12,}\b"
+    r"|\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
+    r"|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    r"|AIza[0-9A-Za-z_-]{20,}"
+    r"|\bBearer\s+[A-Za-z0-9._-]{8,}"
+    r")",
+    re.I | re.MULTILINE,
 )
 _FORMAT_CHECKER = jsonschema.FormatChecker()
 
@@ -47,15 +63,40 @@ def load_generation_profiles(
     config_file = Path(config_path or DEFAULT_PROFILE_PATH)
     schema_file = Path(schema_path or DEFAULT_SCHEMA_PATH)
     try:
-        config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-        schema = json.loads(schema_file.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError, json.JSONDecodeError) as exc:
-        raise GenerationProfileError(f"profile configuration could not be read: {exc}") from exc
+        config_text = config_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise GenerationProfileError("profile configuration could not be read") from exc
     try:
-        jsonschema.validate(instance=config, schema=schema)
+        config = yaml.safe_load(config_text)
+    except yaml.YAMLError as exc:
+        raise GenerationProfileError("profile configuration parse failed") from exc
+    try:
+        schema_text = schema_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise GenerationProfileError("profile schema could not be read") from exc
+    try:
+        schema = json.loads(schema_text)
+    except json.JSONDecodeError as exc:
+        raise GenerationProfileError("profile schema JSON parse failed") from exc
+
+    validator_class = jsonschema.validators.validator_for(schema)
+    try:
+        validator_class.check_schema(schema)
+    except jsonschema.SchemaError as exc:
+        raise GenerationProfileError("profile schema is invalid") from exc
+    try:
+        validator_class(schema, format_checker=_FORMAT_CHECKER).validate(config)
     except jsonschema.ValidationError as exc:
+        location = "$"
+        for segment in exc.absolute_path:
+            if isinstance(segment, int):
+                location += f"[{segment}]"
+            elif _SENSITIVE_KEY.search(str(segment)):
+                location += ".<sensitive-field>"
+            else:
+                location += f".{segment}"
         raise GenerationProfileError(
-            f"profile schema validation failed: {exc.message}"
+            f"profile schema validation failed at {location} ({exc.validator})"
         ) from exc
     findings = _secret_findings(config)
     if findings:
@@ -74,7 +115,10 @@ def validate_generation_profile_registry(
     config: dict[str, Any],
     tool_registry: Any,
 ) -> list[str]:
-    tool_registry.ensure_discovered()
+    try:
+        tool_registry.ensure_discovered()
+    except Exception as exc:
+        return [f"registry discovery failed ({type(exc).__name__})"]
     errors: list[str] = []
     for profile_name, capability, index, candidate in _iter_candidates(config):
         location = f"profiles.{profile_name}.{capability}.candidates[{index}]"
@@ -90,32 +134,44 @@ def validate_generation_profile_registry(
             errors.append(
                 f"{location}: capability {capability!r} does not match {tool.capability!r}"
             )
-        properties = tool.input_schema.get("properties", {})
+        input_schema = getattr(tool, "input_schema", None)
+        if not isinstance(input_schema, dict):
+            errors.append(f"{location}: input_schema is not an object")
+            continue
+        properties = input_schema.get("properties", {})
+        if not isinstance(properties, dict):
+            errors.append(f"{location}: input_schema.properties is not an object")
+            continue
         for key, value in candidate["params"].items():
             if key not in properties:
                 errors.append(f"{location}: param {key!r} is not accepted by {tool.name}")
                 continue
             property_schema = properties[key]
+            try:
+                property_validator = jsonschema.validators.validator_for(property_schema)
+                property_validator.check_schema(property_schema)
+            except (jsonschema.SchemaError, TypeError, AttributeError):
+                errors.append(
+                    f"{location}: param {key!r} has invalid registry schema"
+                )
+                continue
             allowed = property_schema.get("enum")
             if allowed is not None:
                 try:
-                    jsonschema.validate(instance=value, schema={"enum": allowed})
+                    property_validator({"enum": allowed}).validate(value)
                 except jsonschema.ValidationError:
                     errors.append(
-                        f"{location}: param {key!r} value {value!r} "
-                        f"is outside enum {allowed!r}"
+                        f"{location}: param {key!r} is outside enum"
                     )
                     continue
             try:
-                jsonschema.validate(
-                    instance=value,
-                    schema=property_schema,
-                    format_checker=_FORMAT_CHECKER,
-                )
+                property_validator(
+                    property_schema, format_checker=_FORMAT_CHECKER
+                ).validate(value)
             except jsonschema.ValidationError as exc:
                 errors.append(
-                    f"{location}: param {key!r} value {value!r} "
-                    f"violates schema: {exc.message}"
+                    f"{location}: param {key!r} violates registry schema "
+                    f"({exc.validator})"
                 )
     return errors
 

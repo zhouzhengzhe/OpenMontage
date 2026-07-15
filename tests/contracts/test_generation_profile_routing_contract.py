@@ -136,11 +136,40 @@ def test_agent_guide_requires_profile_resolution_before_provider_proposal() -> N
     assert "Paid-provider disclosure remains governed separately" in section
 
 
+def test_agent_guide_validates_before_consuming_safe_profile_report() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    section = _section(text, "## Generation Profiles (Mandatory)")
+
+    validate = section.index("openmontage profiles validate")
+    report = section.index("openmontage profiles` JSON")
+    assert validate < report
+    assert "不得在校验前直接读取原始 `generation_profiles.yaml`" in section
+
+
+def test_routing_skill_validates_before_consuming_safe_profile_report() -> None:
+    text = ROUTING.read_text(encoding="utf-8")
+    proposal = _section(text, "## Provider 提案流程")
+
+    validate = proposal.index("openmontage profiles validate")
+    report = proposal.index("openmontage profiles` JSON")
+    assert validate < report
+    assert "不得在校验前直接读取原始 `generation_profiles.yaml`" in text
+
+
 def test_global_skill_reads_central_profile_policy() -> None:
     text = GLOBAL_SKILL.read_text(encoding="utf-8")
     assert "generation_profiles.yaml" in text
     assert "skills/meta/generation-profile-routing.md" in text
     assert "不得自动触发" in text
+
+
+def test_global_skill_validates_before_consuming_safe_profile_report() -> None:
+    text = GLOBAL_SKILL.read_text(encoding="utf-8")
+
+    validate = text.index("openmontage profiles validate")
+    report = text.index("openmontage profiles` JSON")
+    assert validate < report
+    assert "不得在校验前直接读取原始 `generation_profiles.yaml`" in text
 
 
 def test_global_cli_really_parses_profiles_validate() -> None:

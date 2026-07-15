@@ -11,6 +11,13 @@ from typing import Sequence
 
 
 DEFAULT_HOME = Path(r"D:\SoftDocument\CodexProject\OpenMontage")
+CODE_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _activate_central_code() -> None:
+    code_root = str(CODE_ROOT)
+    if sys.path[:1] != [code_root]:
+        sys.path.insert(0, code_root)
 
 
 def resolve_home() -> Path:
@@ -85,7 +92,7 @@ def _run(home: Path, args: Sequence[str]) -> int:
 
 
 def preflight(home: Path) -> int:
-    sys.path.insert(0, str(home))
+    _activate_central_code()
     from tools.tool_registry import registry
 
     registry.discover()
@@ -94,7 +101,7 @@ def preflight(home: Path) -> int:
 
 
 def profiles(home: Path, validate_only: bool = False) -> int:
-    sys.path.insert(0, str(home))
+    _activate_central_code()
     from lib.generation_profiles import (
         GenerationProfileError,
         build_generation_profile_report,
@@ -142,6 +149,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except Exception as exc:
+        report = {
+            "ok": False,
+            "errors": [f"diagnostic failed ({type(exc).__name__})"],
+        }
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1
+
+
+def _main(argv: list[str] | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     home = resolve_home()
     if raw_args[:1] == ["demo"]:

@@ -1,6 +1,6 @@
 # Generation Profile Routing
 
-在每个 OpenMontage 生产请求的 Provider 提案之前读取中央 `generation_profiles.yaml`，并按本 Skill 解析 `daily` 或 `quality`。档位只产生候选短名单，不构成付费调用授权。
+在每个 OpenMontage 生产请求的 Provider 提案之前，先读取本 Skill，再运行 `openmontage profiles validate`。不得在校验前直接读取原始 `generation_profiles.yaml`。只有校验成功后，才消费安全加载产生的 `openmontage profiles` JSON 报告，并按本 Skill 解析 `daily` 或 `quality`。档位只产生候选短名单，不构成付费调用授权。
 
 ## 解析优先级
 
@@ -34,11 +34,12 @@
 ## Provider 提案流程
 
 1. 运行 `provider_menu_summary()`，报告实际能力。
-2. 运行 `openmontage profiles validate` 或等价只读校验。
-3. 从已解析档位读取对应能力候选；档位候选的 `params` 先按目标工具 `input_schema` 做属性级校验（包括属性类型、`enum`、边界和未知属性），只保留注册表存在且候选参数契约匹配的项。
-4. 披露已解析档位和候选；付费 Provider 另按既有付费披露规则说明精确工具、Provider、模型或变体、原因、样片或批量状态与预计费用。
-5. 等待 Provider/模型和生产计划批准，再写入 `decision_log`，并构造包含提示词、输入资产、输出路径及所有运行参数的最终请求。
-6. 最终完整生成请求在执行前再按目标工具完整 `input_schema` 校验；任何必填字段、属性或组合约束失败都停止执行并报告错误，不得调用生成工具。
+2. 运行 `openmontage profiles validate` 或等价只读校验；失败时停止，不消费原始配置。
+3. 校验成功后读取安全加载产生的 `openmontage profiles` JSON 报告，不直接消费原始 YAML。
+4. 从已解析档位读取对应能力候选；档位候选的 `params` 先按目标工具 `input_schema` 做属性级校验（包括属性类型、`enum`、边界和未知属性），只保留注册表存在且候选参数契约匹配的项。
+5. 披露已解析档位和候选；付费 Provider 另按既有付费披露规则说明精确工具、Provider、模型或变体、原因、样片或批量状态与预计费用。
+6. 等待 Provider/模型和生产计划批准，再写入 `decision_log`，并构造包含提示词、输入资产、输出路径及所有运行参数的最终请求。
+7. 最终完整生成请求在执行前再按目标工具完整 `input_schema` 校验；任何必填字段、属性或组合约束失败都停止执行并报告错误，不得调用生成工具。
 
 ## 强制约束
 
