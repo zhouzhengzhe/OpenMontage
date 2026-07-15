@@ -426,6 +426,12 @@ When `render_runtime="hyperframes"` is locked and HyperFrames is unavailable (No
 
 Routing is automatic — `video_compose` reads `edit_decisions.render_runtime` and dispatches to the matching engine (`_render_via_hyperframes`, `_remotion_render`, or `_render_via_ffmpeg`). But the **agent must know both Remotion and HyperFrames exist at proposal time** so it can design the visual approach intentionally. Don't default to Remotion for motion-graphics-heavy concepts that HTML/GSAP would express more naturally, and don't default to HyperFrames for briefs that reuse the existing React scene stack.
 
+## Generation Profiles (Mandatory)
+
+Before proposing any paid generation provider, read `skills/meta/generation-profile-routing.md` and the central `generation_profiles.yaml`. Resolve `daily` or `quality`, validate candidates against the live registry, and disclose the resolved profile in the provider proposal.
+
+The profile is a preference policy, not approval and not an automatic fallback chain. Provider/model substitutions still require the Decision Communication Contract, budget checks, and an append-only `decision_log` revision.
+
 ## Capability Discovery
 
 OpenMontage uses two layers for capability choice:

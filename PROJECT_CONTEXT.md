@@ -23,6 +23,7 @@ Agent reads pipeline manifest (YAML) → reads stage director skill (MD)
 - **Agent guide & contract:** `AGENT_GUIDE.md` (tool inventory, pipeline selection, stage agents, protocols)
 - **Skill index:** `skills/INDEX.md`
 - **Tool registry:** `tools/tool_registry.py`
+- **Generation profile policy:** `generation_profiles.yaml` + `skills/meta/generation-profile-routing.md`
 - **Pipeline manifests:** `pipeline_defs/`
 - **Artifact schemas:** `schemas/artifacts/`
 - **Style playbooks:** `styles/*.yaml` (schema: `schemas/styles/playbook.schema.json`)
@@ -65,6 +66,8 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 | `lib/checkpoint.py` | Checkpoint writer/reader |
 | `lib/pipeline_loader.py` | Pipeline manifest loader + helpers |
 | `lib/media_profiles.py` | Platform-specific render profiles |
+| `generation_profiles.yaml` | Non-secret daily/quality provider preferences |
+| `lib/generation_profiles.py` | Profile schema, secret scan, and registry-contract diagnostics |
 | `styles/playbook_loader.py` | Style playbook loader + validator + design intelligence (color/type/a11y) |
 | `tools/base_tool.py` | ToolContract base class |
 | `tools/tool_registry.py` | Tool discovery and reporting |

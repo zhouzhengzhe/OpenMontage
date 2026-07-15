@@ -67,6 +67,12 @@ class InstallerContractTests(unittest.TestCase):
         self.assertIn("明确要求", text)
         self.assertIn("不得自动触发", text)
 
+    def test_skill_routes_to_central_generation_profiles(self) -> None:
+        text = SKILL.read_text(encoding="utf-8")
+        self.assertIn("generation_profiles.yaml", text)
+        self.assertIn("skills/meta/generation-profile-routing.md", text)
+        self.assertNotIn("API 密钥值", text)
+
     def test_skill_ui_disables_implicit_invocation(self) -> None:
         text = SKILL_UI.read_text(encoding="utf-8")
         self.assertIn("allow_implicit_invocation: false", text)
